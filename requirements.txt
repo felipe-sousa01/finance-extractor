@@ -1,0 +1,6 @@
+python-telegram-bot
+matplotlib
+numpy
+text2num
+python-dotenv
+google-genai
