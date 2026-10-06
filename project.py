@@ -11,11 +11,35 @@ from text_to_num import alpha2digit
 from dotenv import load_dotenv
 from google import genai
 from os import environ
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from pathlib import Path
 
 load_dotenv()
 
+creds = Credentials.from_service_account_file(
+    f"{Path(__file__).parent}/service_account_credentials.json",
+    scopes=["https://www.googleapis.com/auth/spreadsheets"],
+)
+service = build("sheets", "v4", credentials=creds)
+google_sheet_id = environ["GOOGLE_SHEET_ID"]
+
 class Spending:
-    categories = ["Fixed Expenses", "Comfort", "Fun", "Financial Freedom", "Goals", "Knowledge"]
+    categories = ["Custos Fixos", "Conforto", "Prazeres", "Liberdade Financeira", "Metas", "Conhecimento"]
+    __months = {
+                "01":"Janeiro",
+                "02":"Fevereiro",
+                "03":"Março",
+                "04":"Abril",
+                "05":"Maio",
+                "06":"Junho",
+                "07":"Julho",
+                "08":"Agosto",
+                "09":"Setembro",
+                "10":"Outubro",
+                "11":"Novembro",
+                "12":"Dezembro"
+            }
 
     def __init__(self, spending_dict):
         self.item = spending_dict["item"]
@@ -55,9 +79,9 @@ class Spending:
         else:
             closing_date_day = 29
 
-        if self.payment_method == "Credit" and sp_day_int < closing_date_day:
+        if self.payment_method == "Crédito" and sp_day_int < closing_date_day:
             self.pay_date = self.add_month(sp_date)
-        elif self.payment_method == "Credit" and sp_day_int >= closing_date_day:
+        elif self.payment_method == "Crédito" and sp_day_int >= closing_date_day:
             self.pay_date = self.add_month(sp_date,months=2)
         else:
             self.pay_date = sp_date
@@ -68,14 +92,26 @@ class Spending:
     def divide_into_installments(self, n):
         all_rows = []
         for i in range(n):
+            iso_spending_date = self.spending_date
+            spending_year = iso_spending_date.split("-")[0]
+            spending_month = iso_spending_date.split("-")[1]
+            spending_day = iso_spending_date.split("-")[2]
+        
+            iso_payment_date = self.add_month(self.pay_date, i)
+            payment_year = iso_payment_date.split("-")[0]
+            payment_month = iso_payment_date.split("-")[1]
+            payment_day = iso_payment_date.split("-")[2]
+
             row = {
                 "item" : f"{self.item} ({i+1}/{n})",
-                "value": round(self.value / n, 2),
-                "category": self.category,
-                "payment_method": self.payment_method,
-                "spending_date": self.spending_date,
-                "pay_date": self.add_month(self.pay_date, i),
-                "installments": self.installments
+                "valor": round(self.value / n, 2),
+                "categoria": self.category,
+                "forma de pagamento": self.payment_method,
+                "data do gasto": f"{spending_day}/{spending_month}/{spending_year}",
+                "data de pagamento": f"{payment_day}/{payment_month}/{payment_year}",
+                "parcelas": self.installments,
+                "mês de pagamento": Spending.__months.get(payment_month),
+                "ano": payment_year
             }
 
             all_rows.append(row)
@@ -121,7 +157,7 @@ class Spending:
 
     @payment_method.setter
     def payment_method(self, payment_method):
-        if payment_method not in ["Credit", "Money", "Debit"]:
+        if payment_method not in ["Crédito", "Pix/Dinheiro", "Débito"]:
             raise ValueError(f"{payment_method} is an invalid payment method")
 
         self._payment_method = payment_method
@@ -198,18 +234,35 @@ async def main():
 
             # Convert spending into actual rows for csv
             rows_to_add = spending.to_rows()
+            rows_as_list = []
+
+            # Convert from list of dicts to list of lists (format of google sheets API)
+            headers = service.spreadsheets().values().get(
+                spreadsheetId=google_sheet_id,
+                range="Gastos!1:1"
+            ).execute()["values"][0]
+
+            for r in rows_to_add:
+                current_row = [
+                    r.get(h, "") for h in headers
+                ]
+                rows_as_list.append(current_row)
+
+            rows_to_add = rows_as_list
 
             # Add rows to table
-            with open("spendings.csv", newline="", mode="a") as f:
-                fieldnames = ["item","value","category","payment_method","spending_date","pay_date","installments"]
-                writer = csv.DictWriter(f, fieldnames = fieldnames)
-                writer.writerows(rows_to_add)
+            api_answer = service.spreadsheets().values().append(
+                spreadsheetId=google_sheet_id,
+                range="Gastos",
+                valueInputOption="USER_ENTERED",
+                body={"values": rows_to_add},
+            ).execute()
+
+            if api_answer["updates"]["updatedRows"] != len(rows_as_list):
+                raise ValueError("Linhas adicionadas não foi igual ao número de linhas feitas no código")
 
             # Send feedback message
             await send_message(success_feedback_message(spending), chat_id)
-
-    # else:
-    #     sys.exit("No new messages")
 
     # Check if queue is over
     async with bot:
@@ -266,7 +319,7 @@ async def validate_message(m, update_id=None, c_id=None, test = False):
 def convert_to_dict(p_txt):
     client = genai.Client()
 
-    with open("system_prompt.txt", "r") as file:
+    with open("system_prompt.txt", "r", encoding="utf-8") as file:
         system_instruction = file.read().replace(r"{current_date}", str(dt.date.today()))
 
         interaction = client.interactions.create(
@@ -357,7 +410,7 @@ Please choose:
 
 def generate_pie(f, year, month=None):
 
-    with open(f, newline="", mode="r") as file:
+    with open(f, newline="", mode="r", encoding="utf-8") as file:
         spendings = csv.DictReader(file)
         yr_spendings = []
 
@@ -438,7 +491,7 @@ def generate_stackplot(file):
 
     current_year = str(dt.date.today()).split("-")[0]
 
-    with open(file, newline="", mode="r") as file:
+    with open(file, newline="", mode="r", encoding="utf-8") as file:
         spendings = csv.DictReader(file)
 
         # Filter current year spendings

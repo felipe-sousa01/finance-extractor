@@ -1,0 +1,15 @@
+# Secrets
+.env
+service_account_credentials.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / system
+.vscode/
+.idea/
+.DS_Store
+
