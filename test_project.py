@@ -48,10 +48,10 @@ async def test_generate_chart():
 @pytest.mark.asyncio
 async def test_Spending():
     valid_dict = {
-        "item": "Television",
+        "item": "Televisão",
         "value": "300",
-        "category": "Comfort",
-        "payment_method": "Credit",
+        "category": "Conforto",
+        "payment_method": "Crédito",
         "spending_date": "2020-01-01",
         "installments": "12"
     }
@@ -59,8 +59,8 @@ async def test_Spending():
     invalid_dict = {
         "item": "",
         "value": None,
-        "category": "Entertainment",
-        "payment_method": "credit card",
+        "category": "Entretenimento",
+        "payment_method": "cartão de crédito",
         "spending_date": "01-01-2020",
         "installments": "twelve"
     }
