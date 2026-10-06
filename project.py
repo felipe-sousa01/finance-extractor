@@ -59,19 +59,16 @@ class Spending:
 
     @classmethod
     def add_month(cls, iso_date, months=1):
-        month = int(iso_date.split("-")[1])
+        month = int(iso_date.split("-")[1]) - 1
         year = int(iso_date.split("-")[0])
 
-        if month + months <= 12:
-            new_iso_date = str(year) + "-" + str(month+months).zfill(2) + "-" + "01"
-        else:
-            years_to_add = (month+months)//12
+        years_to_add, new_month_base_0 = divmod(month+months,12)
 
-            new_year = str(year+years_to_add)
-            new_month = str((month+months)%12).zfill(2)
-            new_day = "01"
+        new_year = str(year+years_to_add)
+        new_month = str(new_month_base_0+1).zfill(2)
+        new_day = "01"
 
-            new_iso_date = new_year + "-" + new_month + "-" + new_day
+        new_iso_date = new_year + "-" + new_month + "-" + new_day
 
         return new_iso_date
 
