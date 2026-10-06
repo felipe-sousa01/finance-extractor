@@ -24,6 +24,11 @@ creds = Credentials.from_service_account_file(
 service = build("sheets", "v4", credentials=creds)
 google_sheet_id = environ["GOOGLE_SHEET_ID"]
 
+headers = service.spreadsheets().values().get(
+                spreadsheetId=google_sheet_id,
+                range="Gastos!1:1"
+            ).execute()["values"][0]
+
 class Spending:
     categories = ["Custos Fixos", "Conforto", "Prazeres", "Liberdade Financeira", "Metas", "Conhecimento"]
     __months = {
@@ -237,10 +242,6 @@ async def main():
             rows_as_list = []
 
             # Convert from list of dicts to list of lists (format of google sheets API)
-            headers = service.spreadsheets().values().get(
-                spreadsheetId=google_sheet_id,
-                range="Gastos!1:1"
-            ).execute()["values"][0]
 
             for r in rows_to_add:
                 current_row = [
@@ -409,35 +410,41 @@ Please choose:
 
 
 def generate_pie(f, year, month=None):
+    table_rows_as_list = service.spreadsheets().values().get(
+        spreadsheetId=google_sheet_id,
+        range="Gastos!A:I"
+    ).execute()["values"]
 
-    with open(f, newline="", mode="r", encoding="utf-8") as file:
-        spendings = csv.DictReader(file)
-        yr_spendings = []
+    table_rows_as_list.pop(0)
 
-        for s in spendings:
-            if s["pay_date"].split("-")[0] == year:
-                yr_spendings.append(s)
+    table_rows_as_dict = [
+        dict(zip(headers,row)) for row in table_rows_as_list
+    ]
 
-        spendings = yr_spendings
+    spendings = table_rows_as_dict
 
-        if month:
-            nxt_month_filtered_spendings = []
+    yr_spendings = [
+        s for s in spendings if s["data de pagamento"].split("/")[2] == year
+    ]            
 
-            for s in spendings:
-                if s["pay_date"].split("-")[1] == month:
-                    nxt_month_filtered_spendings.append(s)
+    spendings = yr_spendings
 
-            spendings = nxt_month_filtered_spendings
+    if month:
+        nxt_month_filtered_spendings = [
+            s for s in spendings if s["data de pagamento"].split("/")[1] == month
+        ]
 
-        sum_dict = {}
+        spendings = nxt_month_filtered_spendings
 
-        for c in Spending.categories:
-            sum_dict[c] = 0
+    sum_dict = {}
 
-        for s in spendings:
-            for c in sum_dict:
-                if s["category"] == c:
-                    sum_dict[c]+=float(s["value"])
+    for c in Spending.categories:
+        sum_dict[c] = 0
+
+    for s in spendings:
+        for c in sum_dict:
+            if s["categoria"] == c:
+                sum_dict[c]+=float(s["valor"].replace("R$ ","").replace(".", "").replace(",", "."))
 
     colors = plt.get_cmap("viridis")(np.linspace(0.3, 1, len(sum_dict.values())))
     plt.pie(sum_dict.values(), colors=colors, labels=sum_dict.keys(), autopct="%1.1f%%", radius=1.2)
