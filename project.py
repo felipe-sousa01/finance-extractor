@@ -24,9 +24,14 @@ creds = Credentials.from_service_account_file(
 service = build("sheets", "v4", credentials=creds)
 google_sheet_id = environ["GOOGLE_SHEET_ID"]
 
+headers = service.spreadsheets().values().get(
+                spreadsheetId=google_sheet_id,
+                range="Gastos!1:1"
+            ).execute()["values"][0]
+
 class Spending:
     categories = ["Custos Fixos", "Conforto", "Prazeres", "Liberdade Financeira", "Metas", "Conhecimento"]
-    __months = {
+    _months = {
                 "01":"Janeiro",
                 "02":"Fevereiro",
                 "03":"Março",
@@ -110,7 +115,7 @@ class Spending:
                 "data do gasto": f"{spending_day}/{spending_month}/{spending_year}",
                 "data de pagamento": f"{payment_day}/{payment_month}/{payment_year}",
                 "parcelas": self.installments,
-                "mês de pagamento": Spending.__months.get(payment_month),
+                "mês de pagamento": Spending._months.get(payment_month),
                 "ano": payment_year
             }
 
@@ -237,10 +242,6 @@ async def main():
             rows_as_list = []
 
             # Convert from list of dicts to list of lists (format of google sheets API)
-            headers = service.spreadsheets().values().get(
-                spreadsheetId=google_sheet_id,
-                range="Gastos!1:1"
-            ).execute()["values"][0]
 
             for r in rows_to_add:
                 current_row = [
@@ -409,131 +410,119 @@ Please choose:
 
 
 def generate_pie(f, year, month=None):
+    table_rows_as_list = service.spreadsheets().values().get(
+        spreadsheetId=google_sheet_id,
+        range="Gastos!A:I"
+    ).execute()["values"]
 
-    with open(f, newline="", mode="r", encoding="utf-8") as file:
-        spendings = csv.DictReader(file)
-        yr_spendings = []
+    table_rows_as_list.pop(0)
 
-        for s in spendings:
-            if s["pay_date"].split("-")[0] == year:
-                yr_spendings.append(s)
+    table_rows_as_dict = [
+        dict(zip(headers,row)) for row in table_rows_as_list
+    ]
 
-        spendings = yr_spendings
+    spendings = table_rows_as_dict
 
-        if month:
-            nxt_month_filtered_spendings = []
+    yr_spendings = [
+        s for s in spendings if s["data de pagamento"].split("/")[2] == year
+    ]            
 
-            for s in spendings:
-                if s["pay_date"].split("-")[1] == month:
-                    nxt_month_filtered_spendings.append(s)
+    spendings = yr_spendings
 
-            spendings = nxt_month_filtered_spendings
+    if month:
+        nxt_month_filtered_spendings = [
+            s for s in spendings if s["data de pagamento"].split("/")[1] == month
+        ]
 
-        sum_dict = {}
+        spendings = nxt_month_filtered_spendings
 
-        for c in Spending.categories:
-            sum_dict[c] = 0
+    sum_dict = {}
 
-        for s in spendings:
-            for c in sum_dict:
-                if s["category"] == c:
-                    sum_dict[c]+=float(s["value"])
+    for c in Spending.categories:
+        sum_dict[c] = 0
+
+    for s in spendings:
+        for c in sum_dict:
+            if s["categoria"] == c:
+                sum_dict[c]+=float(s["valor"].replace("R$ ","").replace(".", "").replace(",", "."))
 
     colors = plt.get_cmap("viridis")(np.linspace(0.3, 1, len(sum_dict.values())))
     plt.pie(sum_dict.values(), colors=colors, labels=sum_dict.keys(), autopct="%1.1f%%", radius=1.2)
 
-    __months = {
-            "01":"Jan",
-            "02":"Feb",
-            "03":"Mar",
-            "04":"Apr",
-            "05":"May",
-            "06":"Jun",
-            "07":"Jul",
-            "08":"Aug",
-            "09":"Sep",
-            "10":"Oct",
-            "11":"Nov",
-            "12":"Dec"
-        }
+    __months = Spending._months
 
     for m in __months:
         if m == month:
             next_month = __months[m]
 
     if month:
-        plt.title(f"Spendings by category for {next_month}", y=1.05, fontweight="bold")
+        plt.title(f"Alocações por categoria para {next_month}", y=1.05, fontweight="bold")
         chart_file_name = "2_month_pie.png"
         plt.savefig(chart_file_name)
         return chart_file_name
     else:
-        plt.title(f"Spendings by category for {year}", y=1.05, fontweight="bold")
+        plt.title(f"Alocações por categoria para {year}", y=1.05, fontweight="bold")
         chart_file_name = "1_year_pie.png"
         plt.savefig("1_year_pie.png")
         return chart_file_name
 
 
 def generate_stackplot(file):
-    __months = {
-        "01":"Jan",
-        "02":"Feb",
-        "03":"Mar",
-        "04":"Apr",
-        "05":"May",
-        "06":"Jun",
-        "07":"Jul",
-        "08":"Aug",
-        "09":"Sep",
-        "10":"Oct",
-        "11":"Nov",
-        "12":"Dec"
-    }
+    __months = Spending._months
 
     current_year = str(dt.date.today()).split("-")[0]
 
-    with open(file, newline="", mode="r", encoding="utf-8") as file:
-        spendings = csv.DictReader(file)
+    table_rows_as_list = service.spreadsheets().values().get(
+        spreadsheetId=google_sheet_id,
+        range="Gastos!A:I"
+    ).execute()["values"]
 
-        # Filter current year spendings
-        current_year_spendings = []
+    table_rows_as_list.pop(0)
 
+    table_rows_as_dict = [
+        dict(zip(headers,row)) for row in table_rows_as_list
+    ]
+
+    spendings = table_rows_as_dict
+
+    # Filter current year spendings
+    current_year_spendings = [
+        s for s in spendings if s["data de pagamento"].split("/")[2] == current_year
+    ]
+
+    # Assign filtered spendings to main dict
+    spendings = current_year_spendings
+
+    # Create dinamically empty dict with chart data
+    spendings_by_category = {}
+
+    for c in Spending.categories:
+        spendings_by_category[c] = []
+
+    # iterate over months, populating the lists created inside the chart data dict
+    for m in __months:
+        n_as_str = m
+        abv = __months[m]
+
+        # Filter month "m"
+        m_spendings = []
         for s in spendings:
-            if s["pay_date"].split("-")[0] == current_year:
-                current_year_spendings.append(s)
+            if s["data de pagamento"].split("/")[1] == n_as_str:
+                m_spendings.append(s)
 
-        # Assign filtered spendings to main dict
-        spendings = current_year_spendings
+        # In each category, creates and accumulates in ms_in_c (monthly spending in category). Append on list of each category
+        for c in spendings_by_category:
+            ms_in_c = 0
+            for ms in m_spendings:
+                if ms["categoria"] == c:
+                    ms_in_c+=float(ms["valor"].replace("R$ ","").replace(".", "").replace(",", "."))
 
-        # Create dinamically empty dict with chart data
-        spendings_by_category = {}
-
-        for c in Spending.categories:
-            spendings_by_category[c] = []
-
-        # iterate over months, populating the lists created inside the chart data dict
-        for m in __months:
-            n_as_str = m
-            abv = __months[m]
-
-            # Filter month "m"
-            m_spendings = []
-            for s in spendings:
-                if s["pay_date"].split("-")[1] == n_as_str:
-                    m_spendings.append(s)
-
-            # In each category, creates and accumulates in ms_in_c (monthly spending in category). Append on list of each category
-            for c in spendings_by_category:
-                ms_in_c = 0
-                for ms in m_spendings:
-                    if ms["category"] == c:
-                        ms_in_c+=float(ms["value"])
-
-                spendings_by_category[c].append(round(ms_in_c,2))
+            spendings_by_category[c].append(round(ms_in_c,2))
 
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.stackplot(__months.values(), spendings_by_category.values(), labels=spendings_by_category.keys())
     ax.legend(fontsize="small")
-    ax.set_title(f"Spendings by month and category in {current_year}", fontweight="bold", y=1.05)
+    ax.set_title(f"Alocações por mês e categoria em {current_year}", fontweight="bold", y=1.05)
     ax.set_xlabel("Month")
     ax.set_ylabel("Dollars")
 
