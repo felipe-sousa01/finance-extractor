@@ -4,3 +4,5 @@ numpy
 text2num
 python-dotenv
 google-genai
+google-api-python-client
+google-auth
