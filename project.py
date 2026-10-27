@@ -297,17 +297,17 @@ async def validate_message(m, update_id=None, c_id=None, test = False):
     async with bot:
         if m == "":
             if test != True:
-                await send_message("ERROR: Message is empty", c_id)
+                await send_message("ERRO: A mensagem está vazia", c_id)
                 await bot.get_updates(update_id+1)
             raise ValueError("Message is empty")
         elif not re.search(r"\w+[\s:,.][\s:,.]?\w+[\s:,.][\s:,.]?\w+",m):
             if test != True:
-                await send_message(f"ERROR: Message '{m}' must cointain at least 3 words", c_id)
+                await send_message(f"ERRO: A mensagem '{m}' precisa conter ao menos 3 palavras", c_id)
                 await bot.get_updates(update_id+1)
             raise ValueError("Message must cointain at least 3 words")
         elif not re.search(r"[0-9]", alpha2digit(m, "en")):
             if test != True:
-                await send_message(f"ERROR: Spending value could not be detected in '{m}'", c_id)
+                await send_message(f"ERRO: O valor do gasto não pôde ser identifciado em '{m}'", c_id)
                 await bot.get_updates(update_id+1)
             raise ValueError("Spending value could not be detected")
 
@@ -337,15 +337,15 @@ def convert_to_dict(p_txt):
 def success_feedback_message(spending_obj):
 
     feedback_message = f"""
-    Spending successfully added:
+    Gasto adicionado com sucesso:
 
     Item: {spending_obj.item}
-    Category: {spending_obj.category},
-    Total Value: {spending_obj.value}
-    Installments: {spending_obj.installments}
-    Installment Value: {round(spending_obj.value/spending_obj.installments,2)}
-    Payment method: {spending_obj.payment_method}
-    Payment date: {spending_obj.pay_date}
+    Categoria: {spending_obj.category},
+    Valor total: {spending_obj.value}
+    Parcelas: {spending_obj.installments}
+    Valor das parcelas: {round(spending_obj.value/spending_obj.installments,2)}
+    Método de pagamento: {spending_obj.payment_method}
+    Data de pagamento: {spending_obj.pay_date}
     """
 
     return feedback_message
@@ -363,12 +363,12 @@ async def ask_user_for_chart(update_id, c_id):
         # Send message for user input
         await send_message(
             """
-Please choose:
+Escolha uma das opções:
 
-0   End program
-1   Generate spendings by category in the current year
-2   Generate spendings by category for next month
-3   Generate spendings by category month-by-month on the current year""",
+0   Encerrar programa
+1   Gerar gráfico de gastos por categoria no ano atual
+2   Gerar gráfico de gastos por categoria para o mês que vem
+3   Gerar gráfico de gastos por categoria mês a mês no ano atual""",
             c_id
         )
 
@@ -389,19 +389,19 @@ Please choose:
                     await bot.get_updates(update_id+1)
                     break
                 elif i == 6:
-                    await bot.send_message(text="Program will be ended in 3 seconds", chat_id=c_id)
+                    await bot.send_message(text="O programa vai ser encerrado em 3 segundos", chat_id=c_id)
                 elif i == 9:
-                    await bot.send_message(text="Ending the program", chat_id=c_id)
+                    await bot.send_message(text="Encerrando o programa", chat_id=c_id)
                     sys.exit("Ending the program due to inactivity")
 
         if decision in ["0","1","2","3"]:
             break
         elif tries == 3:
-            await send_message("Ending program", c_id)
+            await send_message("Encerrado o programa", c_id)
             sys.exit()
         else:
             tries += 1
-            await send_message("Invalid input, please choose between 0, 1, 2 or 3", c_id)
+            await send_message("Entrada inválida, escolha entre 0, 1, 2 ou 3", c_id)
 
     return decision
 
@@ -536,20 +536,20 @@ async def generate_chart(request,c_id=None,test=False):
             chart_file_name = generate_pie("spendings.csv", year=current_year)
             if test == False:
                 async with bot:
-                    await bot.send_photo(c_id, open("1_year_pie.png","r+b"), caption="Spendings by category in the current year")
+                    await bot.send_photo(c_id, open("1_year_pie.png","r+b"), caption="Gastos por categoria no ano atual")
 
         case "2": # Generate chart for following month
             target_date = Spending.add_month(str(dt.date.today()))
             chart_file_name = generate_pie("spendings.csv", year=target_date.split("-")[0], month=target_date.split("-")[1])
             if test == False:
                 async with bot:
-                    await bot.send_photo(c_id, open("2_month_pie.png","r+b"),caption="Spendings by category for next month")
+                    await bot.send_photo(c_id, open("2_month_pie.png","r+b"),caption="Gastos por categoria no mês que vem")
 
         case "3":
             chart_file_name = generate_stackplot("spendings.csv")
             if test == False:
                 async with bot:
-                    await bot.send_photo(c_id, open("3_year_stack.png","r+b"),caption="Spendings by category month-by-month on the current year")
+                    await bot.send_photo(c_id, open("3_year_stack.png","r+b"),caption="Gastos por categoria no ano atual mês a mês")
 
     return chart_file_name
 
